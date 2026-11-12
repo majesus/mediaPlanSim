@@ -1,0 +1,12 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^README\.md$
+^cran-comments\.md$
+^\.github$
+^\.git
+^LICENSE\.md$
+^_pkgdown\.yml$
+^docs$
+^man-roxygen$
+^doc$
+^Meta$

@@ -1,0 +1,34 @@
+Package: mediaPlanSim
+Type: Package
+Title: Synthetic Multi-Insertion Exposure Data with Known Truth for Media Plans
+Version: 0.1.0
+Authors@R: 
+    person(given = "Manuel J.", family = "Sánchez-Franco",
+           email = "majesus@us.es", role = c("aut", "cre"),
+           comment = c(ORCID = "0000-0002-8042-3550"))
+Description: Generates individual-level synthetic exposure data for media plans,
+    that is, the number of contacts of each person with each vehicle, from
+    explicit data-generating mechanisms: independent Beta-Binomial vehicles,
+    vehicles linked by a Gaussian copula on their exposure propensities, and
+    audiences made of latent segments (which can produce negative association
+    between vehicles). For every mechanism it also computes the true
+    distribution of the number of contacts of the plan, its reach, and the
+    population moments that a media planner would feed to an exposure model:
+    the reach of one and of two insertions of each vehicle and the duplication
+    between vehicles. Survey data seldom contain observed exposure to several
+    insertions, so these mechanisms provide a truth against which
+    exposure-distribution models can be evaluated. The truth is exact for
+    independent and latent-segment mechanisms and is computed by deterministic
+    quasi-Monte Carlo integration for the Gaussian copula.
+License: MIT + file LICENSE
+URL: https://github.com/majesus/mediaPlanSim
+BugReports: https://github.com/majesus/mediaPlanSim/issues
+Depends: R (>= 4.0)
+Imports: stats
+Suggests: knitr, rmarkdown, testthat (>= 3.0.0)
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+Encoding: UTF-8
+Language: en-US
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.1

@@ -1,0 +1,171 @@
+---
+title: "Benchmarking exposure models against a known truth"
+author: "Manuel J. Sánchez-Franco"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Benchmarking exposure models against a known truth}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+library(mediaPlanSim)
+```
+
+## Purpose and scope
+
+A model of the distribution of contacts of a media plan receives, in practice,
+the reach of one and of two insertions of each vehicle and the duplication
+between vehicles, and returns the probability of each number of contacts. To
+check such a model one needs a population in which the whole distribution of
+contacts is known. Survey data rarely provide it, because they record at most a
+declared frequency or the exposure of a single day.
+
+`mediaPlanSim` builds such populations from explicit mechanisms. Given the
+propensity of a person to be exposed to each vehicle, the contacts with vehicle
+$j$ are binomial with $n_j$ trials and that propensity, and vehicles are
+independent given the propensities. The mechanisms differ only in how the
+propensities are generated and linked.
+
+Three limits must be kept in mind:
+
+* Data simulated from a mechanism inherit its assumptions. Reproducing the truth
+  of a mechanism does not show that a model describes real audiences.
+* Insertions of the same vehicle are exchangeable given the propensity. This
+  excludes, for example, a person whose exposure depends on the order or timing
+  of insertions.
+* Only vehicles with a bounded number of insertions are generated.
+  Vehicles with an unbounded stream of impressions are not covered.
+
+## Scenarios
+
+```{r scenarios}
+r1 <- c(TV = 0.20, Press = 0.15, Radio = 0.12)
+r2 <- c(0.312, 0.239, 0.195)
+n  <- c(5, 4, 6)
+
+indep <- scenario_independent(r1, r2, n)
+gauss <- scenario_gaussian(r1, r2, n, rho = 0.4)
+indep
+```
+
+A latent-class scenario describes an audience made of segments. Segments that
+follow different vehicles generate duplication below what independence implies.
+
+```{r latent}
+segments <- scenario_latent_class(
+  class_prob = c(0.35, 0.35, 0.30),
+  class_propensity = cbind(A = c(0.45, 0.15, 0.15), B = c(0.15, 0.45, 0.15)),
+  insertions = c(4, 4)
+)
+pm <- population_moments(segments)
+pm$dup
+prod(pm$r1)  # duplication under independence, for comparison
+```
+
+## The truth and the inputs of a model
+
+`exposure_truth()` returns the true distribution of contacts of the plan, and
+`population_moments()` the reach of one and two insertions and the duplication,
+which are the inputs a model would receive.
+
+```{r truth}
+tr <- exposure_truth(gauss)
+tr$metrics[c("grp", "reach_1plus", "reach_3plus", "ots")]
+round(tr$moments$dup, 4)
+```
+
+For independent and latent-class scenarios the truth is exact. For the Gaussian
+copula it is computed by deterministic quasi-Monte Carlo integration, so the
+`n_qmc` argument controls its accuracy; two values can be compared to judge it.
+
+```{r qmc}
+distribution_error(exposure_truth(gauss, 8192), exposure_truth(gauss, 65536))
+```
+
+## Simulated respondents
+
+```{r simulate}
+sim <- simulate_exposure(gauss, N = 20000, seed = 2026)
+sim
+head(as.data.frame(sim), 3)
+```
+
+The estimated moments approach the population moments as `N` grows, and the
+empirical distribution approaches the truth.
+
+```{r sample}
+round(sample_moments(sim)$r1 - population_moments(gauss)$r1, 4)
+distribution_error(empirical_distribution(sim), tr)
+```
+
+## Scoring a model: dependence matters
+
+The simplest model ignores dependence and takes the convolution of the
+Beta-Binomial marginals. Its error against the truth depends on the mechanism.
+
+```{r indep-model}
+indep_model <- exposure_truth(indep)   # the independence model for this plan
+scenarios <- list(
+  "rho = -0.3" = scenario_gaussian(r1, r2, n, rho = -0.3),
+  "rho = 0"    = scenario_gaussian(r1, r2, n, rho = 0),
+  "rho = 0.4"  = scenario_gaussian(r1, r2, n, rho = 0.4),
+  "rho = 0.8"  = scenario_gaussian(r1, r2, n, rho = 0.8)
+)
+errs <- t(sapply(scenarios, function(s) {
+  distribution_error(indep_model, exposure_truth(s))[c("tv", "reach_1plus")]
+}))
+round(errs, 4)
+```
+
+The row for `rho = 0` shows the numerical error of the quasi-Monte Carlo truth, since
+there the independence model is exact.
+
+## The same moments do not fix the distribution
+
+Two mechanisms can share the reach of one and two insertions of every vehicle
+and the duplication between vehicles, and still differ in the distribution of
+contacts. The next chunk calibrates the correlation of a Gaussian copula so that
+it reproduces the duplication of a latent-class mechanism.
+
+```{r identification}
+lc <- scenario_latent_class(
+  class_prob = c(0.35, 0.35, 0.30),
+  class_propensity = cbind(A = c(0.45, 0.15, 0.15), B = c(0.15, 0.45, 0.15)),
+  insertions = c(4, 4)
+)
+pm <- population_moments(lc)
+gap <- function(rho) {
+  population_moments(scenario_gaussian(pm$r1, pm$r2, c(4, 4), rho))$dup[1, 2] -
+    pm$dup[1, 2]
+}
+rho <- uniroot(gap, c(-0.99, 0))$root
+gc <- scenario_gaussian(pm$r1, pm$r2, c(4, 4), rho)
+
+mom <- function(s) {
+  m <- population_moments(s)
+  c(r1_A = unname(m$r1[1]), r1_B = unname(m$r1[2]),
+    r2_A = unname(m$r2[1]), r2_B = unname(m$r2[2]), dup = m$dup[1, 2])
+}
+round(rbind(latent_class = mom(lc), gaussian = mom(gc)), 4)
+round(distribution_error(exposure_truth(gc), exposure_truth(lc)), 4)
+```
+
+Moments of this kind therefore leave part of the distribution undetermined, and
+a model that outperforms another in one mechanism may not do so in another.
+Benchmarks should state the mechanisms they use and should include several.
+
+## Use with other software
+
+The package depends only on base R and `stats`. To feed a model implemented
+elsewhere, export the moments or the respondents:
+
+```{r export, eval = FALSE}
+pm <- population_moments(gauss)      # r1, r2, dup, insertions
+write.csv(as.data.frame(sim), "respondents.csv", row.names = FALSE)
+```
+
+and read the file from another environment, for example with
+`pandas.read_csv("respondents.csv")` in Python. The columns are `id`, one column
+of contacts per vehicle, and `total`.
