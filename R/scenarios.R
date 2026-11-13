@@ -71,9 +71,50 @@ scenario_independent <- function(r1, r2, insertions) {
 scenario_gaussian <- function(r1, r2, insertions, rho = 0) {
   mg <- .check_marginals(r1, r2, insertions)
   cf <- .corr_factor(rho, mg$m, mg$names)
-  if (mg$m > 16L) stop("At most 16 vehicles are supported.", call. = FALSE)
   .new_scenario("gaussian", mg$m, mg$names, mg$n, r1 = mg$r1, r2 = mg$r2,
                 alpha = mg$alpha, beta = mg$beta, rho = cf$R, chol_factor = cf$L)
+}
+
+#' Restrict a scenario to some vehicles
+#'
+#' Extracts a plan from a scenario that describes a larger universe of vehicles,
+#' for example one calibrated with [calibrate_gaussian()] on all the titles of a
+#' survey. Marginals and dependence of the selected vehicles are kept, and the
+#' number of insertions can be changed. The true distribution of a Gaussian
+#' scenario is computed for at most 16 vehicles; simulation has no such limit.
+#'
+#' @param scenario An object created by a `scenario_*()` function.
+#' @param vehicles Names or positions of the vehicles to keep.
+#' @param insertions Optional new numbers of insertions, one per kept vehicle.
+#' @return A `mp_scenario` of the same type.
+#' @examples
+#' scn <- scenario_gaussian(c(A = 0.2, B = 0.15, C = 0.1),
+#'                          c(0.312, 0.23925, 0.17), c(1, 1, 1), rho = 0.3)
+#' scenario_subset(scn, c("A", "C"), insertions = c(4, 2))
+#' @export
+scenario_subset <- function(scenario, vehicles, insertions = NULL) {
+  stopifnot(inherits(scenario, "mp_scenario"))
+  idx <- if (is.character(vehicles)) match(vehicles, scenario$names) else vehicles
+  if (anyNA(idx) || any(idx < 1L | idx > scenario$m) || anyDuplicated(idx)) {
+    stop("'vehicles' must be distinct names or positions of the scenario.",
+         call. = FALSE)
+  }
+  n <- if (is.null(insertions)) scenario$insertions[idx] else insertions
+  if (length(n) != length(idx)) {
+    stop("'insertions' needs one value per kept vehicle.", call. = FALSE)
+  }
+  nm <- scenario$names[idx]
+  switch(
+    scenario$type,
+    independent = scenario_independent(stats::setNames(scenario$r1[idx], nm),
+                                       scenario$r2[idx], n),
+    gaussian = scenario_gaussian(stats::setNames(scenario$r1[idx], nm),
+                                 scenario$r2[idx], n,
+                                 `dimnames<-`(scenario$rho[idx, idx, drop = FALSE],
+                                              list(nm, nm))),
+    latent_class = scenario_latent_class(
+      scenario$class_prob, scenario$class_propensity[, idx, drop = FALSE], n)
+  )
 }
 
 #' @rdname scenarios

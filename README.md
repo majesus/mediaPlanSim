@@ -32,8 +32,20 @@ population_moments(scn)           # r1, r2 and duplication (inputs of a model)
 sim <- simulate_exposure(scn, N = 10000, seed = 1)
 sample_moments(sim)               # the same moments, estimated from the sample
 distribution_error(empirical_distribution(sim), exposure_truth(scn))
-write.csv(as.data.frame(sim), "respondents.csv", row.names = FALSE)  # for Python
+export_microdata(sim, "respondents.csv")     # CSV for Python; ".xlsx" needs writexl
 ```
+
+### Matching real data
+
+```r
+scn <- calibrate_gaussian(r1, "auto", insertions = rep(1, length(r1)), dup = D,
+                          n_eff = n_eff)          # from observed reach and duplication
+attr(scn, "calibration")$flagged                  # pairs a Gaussian copula cannot reproduce
+compare_to_observed(scenario_subset(scn, plan), contacts_held_out)  # fidelity check
+```
+
+Calibrate on one part of the respondents and check on another; a calibration
+judged with its own data looks better than it is.
 
 ## Mechanisms
 
@@ -42,6 +54,7 @@ write.csv(as.data.frame(sim), "respondents.csv", row.names = FALSE)  # for Pytho
 | `scenario_independent()` | none; Beta-Binomial marginals |
 | `scenario_gaussian()` | Gaussian copula on exposure propensities, positive or negative |
 | `scenario_latent_class()` | audience segments; can produce duplication below independence |
+| `calibrate_gaussian()` | Gaussian copula fitted to observed reach and duplication, regularised |
 
 Given the propensities of a person, the contacts with each vehicle are binomial
 and vehicles are conditionally independent. The truth is exact for the independent

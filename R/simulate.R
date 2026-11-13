@@ -11,9 +11,15 @@
 #'   a given version of R's random number generator settings.
 #' @param keep_propensity If `TRUE`, the latent propensities of each person are
 #'   stored in the result (default `FALSE`).
+#' @param insertion_level If `TRUE`, each insertion is drawn as a 0/1 event with
+#'   probability equal to the propensity of its vehicle, and the matrix is kept in
+#'   `insertions`; the contacts are its row sums by vehicle. The distribution is
+#'   the same as with the default, but the random stream differs. The matrix has
+#'   `N` times `sum(insertions)` entries.
 #' @return An object of class `mp_sim`, a list with `contacts` (an `N` by `m`
 #'   integer matrix with one column per vehicle), `scenario`, `N`, `seed` and,
-#'   optionally, `propensity`. Use `as.data.frame()` to export it, for example
+#'   optionally, `propensity` and `insertions` (an `N` by `sum(insertions)`
+#'   integer 0/1 matrix). Use `as.data.frame()` to export it, for example
 #'   with `write.csv()` for use from other languages.
 #' @examples
 #' scn <- scenario_gaussian(c(A = 0.2, B = 0.15), c(0.312, 0.23925), c(5, 5),
@@ -22,7 +28,8 @@
 #' head(sim$contacts)
 #' head(as.data.frame(sim))
 #' @export
-simulate_exposure <- function(scenario, N, seed = NULL, keep_propensity = FALSE) {
+simulate_exposure <- function(scenario, N, seed = NULL, keep_propensity = FALSE,
+                              insertion_level = FALSE) {
   stopifnot(inherits(scenario, "mp_scenario"))
   if (length(N) != 1L || !is.finite(N) || N < 1 || N != round(N)) {
     stop("'N' must be a single positive integer.", call. = FALSE)
@@ -48,11 +55,25 @@ simulate_exposure <- function(scenario, N, seed = NULL, keep_propensity = FALSE)
       }
     )
     pr <- matrix(pr, N, m)
-    k <- vapply(seq_len(m), function(j) rbinom(N, n[j], pr[, j]), integer(N))
-    list(k = matrix(k, N, m), pr = pr)
+    ins <- NULL
+    if (insertion_level) {
+      col <- rep(seq_len(m), n)
+      ins <- matrix(as.integer(runif(N * length(col)) < pr[, col, drop = FALSE]),
+                    N, length(col))
+      colnames(ins) <- paste0(rep(scenario$names, n), "_",
+                              unlist(lapply(n, seq_len)))
+      k <- vapply(seq_len(m), function(j) {
+        rowSums(ins[, col == j, drop = FALSE])
+      }, numeric(N))
+      k <- matrix(as.integer(k), N, m)
+    } else {
+      k <- vapply(seq_len(m), function(j) rbinom(N, n[j], pr[, j]), integer(N))
+    }
+    list(k = matrix(k, N, m), pr = pr, ins = ins)
   })
   colnames(res$k) <- scenario$names
   out <- list(contacts = res$k, scenario = scenario, N = N, seed = seed)
+  if (!is.null(res$ins)) out$insertions <- res$ins
   if (keep_propensity) {
     colnames(res$pr) <- scenario$names
     out$propensity <- res$pr
@@ -163,8 +184,18 @@ distribution_error <- function(estimate, truth) {
 }
 
 #' @export
-as.data.frame.mp_sim <- function(x, row.names = NULL, optional = FALSE, ...) {
-  df <- data.frame(id = seq_len(x$N), as.data.frame(x$contacts), check.names = FALSE)
+as.data.frame.mp_sim <- function(x, row.names = NULL, optional = FALSE,
+                                 level = c("vehicle", "insertion"), ...) {
+  level <- match.arg(level)
+  if (level == "insertion") {
+    if (is.null(x$insertions)) {
+      stop("No insertion-level data; use simulate_exposure(insertion_level = TRUE).",
+           call. = FALSE)
+    }
+    df <- data.frame(id = seq_len(x$N), as.data.frame(x$insertions), check.names = FALSE)
+  } else {
+    df <- data.frame(id = seq_len(x$N), as.data.frame(x$contacts), check.names = FALSE)
+  }
   df$total <- rowSums(x$contacts)
   if (!is.null(row.names)) rownames(df) <- row.names
   df

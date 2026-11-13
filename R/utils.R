@@ -89,8 +89,27 @@
 
 # Propensity as a function of a standard normal latent value (Gaussian copula
 # with Beta marginals). The upper-tail form keeps precision in the tails.
+# Propensity as a function of the latent normal score. For very small shape
+# parameters (rare vehicles) the quantile is below the smallest double and
+# qbeta() warns that it is not accurate; that mass is treated as zero, which
+# does not change the mean (checked in the tests), so the warning is dropped.
+.pi_exact <- function(alpha, beta, z) {
+  x <- suppressWarnings(
+    qbeta(pnorm(z, lower.tail = FALSE), alpha, beta, lower.tail = FALSE)
+  )
+  bad <- is.na(x)
+  if (any(bad)) x[bad] <- as.numeric(z[bad] > 0)  # propensity is increasing in z
+  pmin(pmax(x, 0), 1)
+}
+
+# For many scores the quantile is interpolated (monotone cubic) on a fine grid of
+# z, which is much faster than calling qbeta() for every draw.
 .pi_from_z <- function(alpha, beta, z) {
-  qbeta(pnorm(z, lower.tail = FALSE), alpha, beta, lower.tail = FALSE)
+  if (length(z) < 4000L) return(.pi_exact(alpha, beta, z))
+  zg <- seq(-9, 9, by = 0.005)
+  f <- stats::splinefun(zg, .pi_exact(alpha, beta, zg), method = "monoH.FC")
+  out <- f(pmin(pmax(z, -9), 9))
+  pmin(pmax(out, 0), 1)
 }
 
 # Run an expression with a given seed and restore the caller's RNG state.

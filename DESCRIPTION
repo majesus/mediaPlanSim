@@ -1,7 +1,7 @@
 Package: mediaPlanSim
 Type: Package
 Title: Synthetic Multi-Insertion Exposure Data with Known Truth for Media Plans
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: 
     person(given = "Manuel J.", family = "Sánchez-Franco",
            email = "majesus@us.es", role = c("aut", "cre"),
@@ -24,8 +24,8 @@ License: MIT + file LICENSE
 URL: https://github.com/majesus/mediaPlanSim
 BugReports: https://github.com/majesus/mediaPlanSim/issues
 Depends: R (>= 4.0)
-Imports: stats
-Suggests: knitr, rmarkdown, testthat (>= 3.0.0)
+Imports: stats, utils, tools
+Suggests: knitr, rmarkdown, testthat (>= 3.0.0), writexl
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 Encoding: UTF-8

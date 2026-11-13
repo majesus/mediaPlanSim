@@ -4,7 +4,13 @@
 \alias{simulate_exposure}
 \title{Simulate synthetic respondents}
 \usage{
-simulate_exposure(scenario, N, seed = NULL, keep_propensity = FALSE)
+simulate_exposure(
+  scenario,
+  N,
+  seed = NULL,
+  keep_propensity = FALSE,
+  insertion_level = FALSE
+)
 }
 \arguments{
 \item{scenario}{An object created by one of the \verb{scenario_*()} functions.}
@@ -17,11 +23,18 @@ a given version of R's random number generator settings.}
 
 \item{keep_propensity}{If \code{TRUE}, the latent propensities of each person are
 stored in the result (default \code{FALSE}).}
+
+\item{insertion_level}{If \code{TRUE}, each insertion is drawn as a 0/1 event with
+probability equal to the propensity of its vehicle, and the matrix is kept in
+\code{insertions}; the contacts are its row sums by vehicle. The distribution is
+the same as with the default, but the random stream differs. The matrix has
+\code{N} times \code{sum(insertions)} entries.}
 }
 \value{
 An object of class \code{mp_sim}, a list with \code{contacts} (an \code{N} by \code{m}
 integer matrix with one column per vehicle), \code{scenario}, \code{N}, \code{seed} and,
-optionally, \code{propensity}. Use \code{as.data.frame()} to export it, for example
+optionally, \code{propensity} and \code{insertions} (an \code{N} by \code{sum(insertions)}
+integer 0/1 matrix). Use \code{as.data.frame()} to export it, for example
 with \code{write.csv()} for use from other languages.
 }
 \description{

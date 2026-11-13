@@ -35,8 +35,18 @@ population_moments <- function(scenario) {
     r2 <- scenario$r2
     d <- outer(r1, r1)
     if (scenario$type == "gaussian" && m > 1L) {
+      Kmax <- .hermite_terms(max(abs(scenario$rho[upper.tri(scenario$rho)])))
+      co <- vector("list", m)
       for (i in seq_len(m - 1L)) for (j in (i + 1L):m) {
-        d[i, j] <- d[j, i] <- .dup_gauss(scenario, i, j)
+        rr <- scenario$rho[i, j]
+        if (abs(rr) > 1e-14 && abs(rr) <= .rho_series_max) {
+          for (k in c(i, j)) if (is.null(co[[k]])) {
+            co[[k]] <- .hermite_coef(scenario$alpha[k], scenario$beta[k], Kmax)
+          }
+          d[i, j] <- d[j, i] <- .dup_series(co[[i]], co[[j]], rr)
+        } else {
+          d[i, j] <- d[j, i] <- .dup_gauss(scenario, i, j)
+        }
       }
     }
   }
@@ -51,6 +61,11 @@ population_moments <- function(scenario) {
 .dup_gauss <- function(scn, i, j) {
   rho <- scn$rho[i, j]
   if (abs(rho) < 1e-14) return(scn$r1[i] * scn$r1[j])
+  if (abs(rho) <= .rho_series_max) {
+    K <- .hermite_terms(rho)
+    return(.dup_series(.hermite_coef(scn$alpha[i], scn$beta[i], K),
+                       .hermite_coef(scn$alpha[j], scn$beta[j], K), rho))
+  }
   zg <- seq(-10, 10, by = 0.02)
   gi <- splinefun(zg, .pi_from_z(scn$alpha[i], scn$beta[i], zg), method = "monoH.FC")
   gj <- splinefun(zg, .pi_from_z(scn$alpha[j], scn$beta[j], zg), method = "monoH.FC")
@@ -100,6 +115,10 @@ exposure_truth <- function(scenario, n_qmc = 32768L) {
   m <- scenario$m
   method <- "exact"
   nq <- NA_integer_
+  if (scenario$type == "gaussian" && m > 16L) {
+    stop("The true distribution of a Gaussian scenario is computed for at most ",
+         "16 vehicles; use scenario_subset() or simulation.", call. = FALSE)
+  }
   if (scenario$type == "independent") {
     pmf <- 1
     for (j in seq_len(m)) pmf <- .conv_vec(pmf, .betabinom_pmf(n[j], scenario$alpha[j], scenario$beta[j]))

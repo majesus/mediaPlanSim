@@ -156,6 +156,70 @@ Moments of this kind therefore leave part of the distribution undetermined, and
 a model that outperforms another in one mechanism may not do so in another.
 Benchmarks should state the mechanisms they use and should include several.
 
+## Matching the dependence of real data
+
+A scenario is only as useful as its resemblance to the data it stands for. When a
+survey gives the reach of one insertion and the duplication between vehicles,
+`calibrate_gaussian()` builds a Gaussian-copula scenario that reproduces them,
+and `compare_to_observed()` checks, against sampling noise, whether the
+distribution of contacts of the scenario is compatible with the observed one.
+
+The next chunk uses a known mechanism as a stand-in for a survey, so that the
+outcome can be judged. Half of the respondents calibrate the scenario and the
+other half test it, which avoids judging a calibration with the data it was
+fitted to.
+
+```{r calibrate}
+r1 <- c(A = 0.14, B = 0.05, C = 0.02)
+r2 <- r1 + 0.4 * (r1 - r1^2)
+truth <- scenario_gaussian(r1, r2, c(1, 1, 1),
+                           matrix(c(1, .6, .3, .6, 1, .5, .3, .5, 1), 3))
+survey <- simulate_exposure(truth, N = 20000, seed = 10)$contacts
+fit_half <- survey[1:10000, ]
+test_half <- survey[10001:20000, ]
+
+m <- colMeans(fit_half)
+dup <- crossprod(fit_half) / nrow(fit_half)
+scn <- calibrate_gaussian(m, NULL, c(1, 1, 1), dup)
+round(attr(scn, "calibration")$rho, 2)
+
+ind <- scenario_independent(m, m + 0.5 * (m - m^2), c(1, 1, 1))
+sapply(list(calibrated = scn, independent = ind), function(s) {
+  unlist(compare_to_observed(s, test_half, B = 100, seed = 1)[
+    c("tv_observed", "tv_bootstrap_mean", "p_value")])
+})
+```
+
+A small `tv_observed` that does not exceed the bootstrap distance, together with a
+large `p_value`, indicates that the scenario is compatible with the held-out
+respondents; the independent scenario is not.
+
+Three cautions apply to real data. First, a Gaussian copula with Beta marginals
+cannot reproduce every duplication: `attr(scn, "calibration")$flagged` lists the
+pairs that stay out of reach, and `r2 = "auto"` makes the propensities more
+dispersed, which is an assumption and not an observation. Second, a free
+correlation for every pair adapts to the noise of the sample, above all for rare
+vehicles; `n_eff`, `shrink` and `rank` regularise it, but regularising is not
+free, and the held-out comparison is the way to decide whether it pays. Third, a survey of one day of reading, for example,
+cannot show how the vehicles behave over several insertions, so a scenario
+calibrated on it describes what it observed, and nothing more.
+
+## Plans, microdata and files
+
+One calibrated universe of vehicles serves many plans: `scenario_subset()`
+extracts the vehicles of a plan and sets their insertions. Contacts per vehicle
+are the default output; `insertion_level = TRUE` returns one 0/1 column per
+insertion. Both can be written to CSV or Excel.
+
+```{r export-files}
+plan <- scenario_subset(scn, c("A", "C"), insertions = c(4, 2))
+sim <- simulate_exposure(plan, N = 1000, seed = 3, insertion_level = TRUE)
+head(as.data.frame(sim, level = "insertion"), 3)
+f <- tempfile(fileext = ".csv")
+export_microdata(sim, f, level = "insertion")
+dim(read.csv(f))
+```
+
 ## Use with other software
 
 The package depends only on base R and `stats`. To feed a model implemented
